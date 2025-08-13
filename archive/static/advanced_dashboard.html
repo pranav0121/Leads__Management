@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouShop Analytics Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --success-color: #4CAF50;
+            --warning-color: #ff9500;
+            --danger-color: #ff6b6b;
+            --info-color: #17a2b8;
+            --dark-color: #2c3e50;
+            --light-color: #f8f9fa;
+            --border-radius: 15px;
+            --box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            --gradient-primary: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            --gradient-success: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            --gradient-warning: linear-gradient(135deg, #ff9500 0%, #e68900 100%);
+            --gradient-danger: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            color: var(--dark-color);
+        }
+
+        .dashboard-header {
+            background: var(--gradient-primary);
+            color: white;
+            padding: 30px 0;
+            box-shadow: var(--box-shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .dashboard-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="rgba(255,255,255,0.1)"/><circle cx="75" cy="75" r="1" fill="rgba(255,255,255,0.1)"/><circle cx="50" cy="10" r="0.5" fill="rgba(255,255,255,0.05)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            opacity: 0.1;
+        }
+
+        .dashboard-title {
+            position: relative;
+            z-index: 2;
+        }
+
+        .dashboard-title h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .dashboard-subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            font-weight: 300;
+        }
+
+        .stats-container {
+            margin-top: -50px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: var(--box-shadow);
+            border: none;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--gradient-primary);
+        }
+
+        .stat-card.success::before {
+            background: var(--gradient-success);
+        }
+
+        .stat-card.warning::before {
+            background: var(--gradient-warning);
+        }
+
+        .stat-card.danger::before {
+            background: var(--gradient-danger);
+        }
+
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .stat-icon.primary {
+            background: var(--gradient-primary);
+        }
+
+        .stat-icon.success {
+            background: var(--gradient-success);
+        }
+
+        .stat-icon.warning {
+            background: var(--gradient-warning);
+        }
+
+        .stat-icon.danger {
+            background: var(--gradient-danger);
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--dark-color);
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .stat-change {
+            font-size: 0.85rem;
+            margin-top: 10px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        .stat-change.positive {
+            background: rgba(76, 175, 80, 0.1);
+            color: var(--success-color);
+        }
+
+        .stat-change.negative {
+            background: rgba(255, 107, 107, 0.1);
+            color: var(--danger-color);
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: var(--box-shadow);
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f8f9fa;
+        }
+
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .time-filter {
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .time-filter:hover, .time-filter.active {
+            background: var(--gradient-success);
+            transform: scale(1.05);
+        }
+
+        .realtime-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--gradient-success);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            box-shadow: var(--box-shadow);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 1000;
+        }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            background: #4CAF50;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+        }
+
+        .lead-alerts {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--box-shadow);
+            margin-bottom: 30px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .alert-content {
+            flex: 1;
+        }
+
+        .alert-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .alert-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .alert-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.05);
+        }
+
+        .ab-testing-panel {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--box-shadow);
+        }
+
+        .test-variant {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .test-variant.winning {
+            border-left-color: var(--success-color);
+            background: rgba(76, 175, 80, 0.05);
+        }
+
+        .variant-metrics {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .metric-badge {
+            background: var(--gradient-primary);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .metric-badge.success {
+            background: var(--gradient-success);
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-title h1 {
+                font-size: 2rem;
+            }
+            
+            .stat-card {
+                padding: 20px;
+                margin-bottom: 20px;
+            }
+            
+            .chart-container {
+                padding: 20px;
+            }
+            
+            .realtime-indicator {
+                position: relative;
+                top: auto;
+                right: auto;
+                margin-bottom: 20px;
+                width: fit-content;
+            }
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Real-time Indicator -->
+    <div class="realtime-indicator">
+        <div class="pulse"></div>
+        <span>Live Dashboard</span>
+        <span id="lastUpdate">Updated now</span>
+    </div>
+
+    <!-- Header -->
+    <div class="dashboard-header">
+        <div class="container">
+            <div class="dashboard-title text-center">
+                <h1><i class="fas fa-chart-line"></i> YouShop Analytics</h1>
+                <p class="dashboard-subtitle">Real-time lead insights and performance metrics</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div class="container">
+        <!-- Stats Cards -->
+        <div class="stats-container">
+            <div class="row">
+                <div class="col-lg-3 col-md-6 mb-4">
+                    <div class="stat-card">
+                        <div class="stat-icon primary">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stat-value" id="totalLeads">-</div>
+                        <div class="stat-label">Total Leads</div>
+                        <div class="stat-change positive" id="leadsChange">
+                            <i class="fas fa-arrow-up"></i> +12% this week
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-3 col-md-6 mb-4">
+                    <div class="stat-card success">
+                        <div class="stat-icon success">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="stat-value" id="sqlLeads">-</div>
+                        <div class="stat-label">SQL Leads</div>
+                        <div class="stat-change positive" id="sqlChange">
+                            <i class="fas fa-arrow-up"></i> +24% this week
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-3 col-md-6 mb-4">
+                    <div class="stat-card warning">
+                        <div class="stat-icon warning">
+                            <i class="fas fa-percentage"></i>
+                        </div>
+                        <div class="stat-value" id="conversionRate">-</div>
+                        <div class="stat-label">Conversion Rate</div>
+                        <div class="stat-change positive" id="conversionChange">
+                            <i class="fas fa-arrow-up"></i> +8% this week
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-3 col-md-6 mb-4">
+                    <div class="stat-card danger">
+                        <div class="stat-icon danger">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="stat-value" id="avgScore">-</div>
+                        <div class="stat-label">Avg Lead Score</div>
+                        <div class="stat-change positive" id="scoreChange">
+                            <i class="fas fa-arrow-up"></i> +15% this week
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row">
+            <!-- Lead Funnel Chart -->
+            <div class="col-lg-8 mb-4">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title"><i class="fas fa-funnel-dollar"></i> Lead Conversion Funnel</h3>
+                        <div class="chart-controls">
+                            <button class="time-filter active" data-period="7d">7 Days</button>
+                            <button class="time-filter" data-period="30d">30 Days</button>
+                            <button class="time-filter" data-period="90d">90 Days</button>
+                        </div>
+                    </div>
+                    <canvas id="funnelChart" height="400"></canvas>
+                </div>
+            </div>
+
+            <!-- Real-time Leads -->
+            <div class="col-lg-4 mb-4">
+                <div class="lead-alerts">
+                    <h3 class="mb-3"><i class="fas fa-fire"></i> Hot Leads Alert</h3>
+                    <div id="realtimeLeads">
+                        <div class="text-center py-4">
+                            <div class="loading-spinner mb-3"></div>
+                            <p>Loading real-time leads...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Second Row -->
+        <div class="row">
+            <!-- Channel Performance -->
+            <div class="col-lg-6 mb-4">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title"><i class="fas fa-broadcast-tower"></i> Channel Performance</h3>
+                    </div>
+                    <canvas id="channelChart" height="300"></canvas>
+                </div>
+            </div>
+
+            <!-- A/B Testing Results -->
+            <div class="col-lg-6 mb-4">
+                <div class="ab-testing-panel">
+                    <h3 class="mb-3"><i class="fas fa-vial"></i> A/B Testing Results</h3>
+                    <div id="abTestResults">
+                        <div class="test-variant winning">
+                            <h5>Greeting Message Test</h5>
+                            <p><strong>Variant B:</strong> "🔥 Transform your business with YouShop!"</p>
+                            <div class="variant-metrics">
+                                <span>Conversion: 24.5%</span>
+                                <span class="metric-badge success">+18% vs Control</span>
+                            </div>
+                        </div>
+                        
+                        <div class="test-variant">
+                            <h5>CTA Button Test</h5>
+                            <p><strong>Variant A:</strong> Traditional Blue Buttons</p>
+                            <div class="variant-metrics">
+                                <span>Conversion: 18.2%</span>
+                                <span class="metric-badge">Control Group</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Response Time Analysis -->
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title"><i class="fas fa-clock"></i> Response Time Analysis</h3>
+                        <div class="chart-controls">
+                            <button class="time-filter active" data-chart="response">Today</button>
+                            <button class="time-filter" data-chart="response">This Week</button>
+                            <button class="time-filter" data-chart="response">This Month</button>
+                        </div>
+                    </div>
+                    <canvas id="responseTimeChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dashboard JavaScript
+        let charts = {};
+        let updateInterval;
+
+        // Initialize Dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDashboard();
+            setupEventListeners();
+            startRealTimeUpdates();
+        });
+
+        function initializeDashboard() {
+            loadDashboardData();
+            createCharts();
+        }
+
+        function setupEventListeners() {
+            // Time filter buttons
+            document.querySelectorAll('.time-filter').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const period = this.dataset.period;
+                    const chart = this.dataset.chart;
+                    
+                    // Update active state
+                    this.parentElement.querySelectorAll('.time-filter').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Update charts based on period
+                    if (chart) {
+                        updateChartData(chart, period);
+                    } else {
+                        loadDashboardData(period);
+                    }
+                });
+            });
+        }
+
+        function loadDashboardData(period = '7d') {
+            // Simulate loading with animation
+            showLoading();
+            
+            fetch('/api/analytics/dashboard')
+                .then(response => response.json())
+                .then(data => {
+                    updateMetrics(data);
+                    updateCharts(data);
+                    updateRealtimeLeads(data);
+                    updateABTestResults(data);
+                    hideLoading();
+                })
+                .catch(error => {
+                    console.error('Dashboard data error:', error);
+                    showError('Failed to load dashboard data');
+                });
+        }
+
+        function updateMetrics(data) {
+            const metrics = data.conversion_metrics || {};
+            
+            // Animate number updates
+            animateNumber('totalLeads', metrics.total_leads || 0);
+            animateNumber('sqlLeads', metrics.sql_leads || 0);
+            animateNumber('conversionRate', (metrics.sql_conversion_rate || 0).toFixed(1) + '%');
+            animateNumber('avgScore', (metrics.average_score || 0).toFixed(0));
+            
+            // Update change indicators
+            updateChangeIndicator('leadsChange', 12, 'this week');
+            updateChangeIndicator('sqlChange', 24, 'this week');
+            updateChangeIndicator('conversionChange', 8, 'this week');
+            updateChangeIndicator('scoreChange', 15, 'this week');
+        }
+
+        function animateNumber(elementId, targetValue) {
+            const element = document.getElementById(elementId);
+            const currentValue = parseInt(element.textContent) || 0;
+            const increment = (targetValue - currentValue) / 20;
+            let current = currentValue;
+            
+            const timer = setInterval(() => {
+                current += increment;
+                if ((increment > 0 && current >= targetValue) || (increment < 0 && current <= targetValue)) {
+                    current = targetValue;
+                    clearInterval(timer);
+                }
+                element.textContent = typeof targetValue === 'string' ? targetValue : Math.round(current);
+            }, 50);
+        }
+
+        function updateChangeIndicator(elementId, percentage, period) {
+            const element = document.getElementById(elementId);
+            const isPositive = percentage >= 0;
+            element.className = `stat-change ${isPositive ? 'positive' : 'negative'}`;
+            element.innerHTML = `
+                <i class="fas fa-arrow-${isPositive ? 'up' : 'down'}"></i> 
+                ${isPositive ? '+' : ''}${percentage}% ${period}
+            `;
+        }
+
+        function createCharts() {
+            createFunnelChart();
+            createChannelChart();
+            createResponseTimeChart();
+        }
+
+        function createFunnelChart() {
+            const ctx = document.getElementById('funnelChart').getContext('2d');
+            charts.funnel = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Visitors', 'Engaged', 'Qualified', 'SQL', 'Converted'],
+                    datasets: [{
+                        label: 'Lead Funnel',
+                        data: [1000, 650, 320, 125, 45],
+                        backgroundColor: [
+                            'rgba(102, 126, 234, 0.8)',
+                            'rgba(118, 75, 162, 0.8)',
+                            'rgba(255, 149, 0, 0.8)',
+                            'rgba(76, 175, 80, 0.8)',
+                            'rgba(255, 107, 107, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(102, 126, 234, 1)',
+                            'rgba(118, 75, 162, 1)',
+                            'rgba(255, 149, 0, 1)',
+                            'rgba(76, 175, 80, 1)',
+                            'rgba(255, 107, 107, 1)'
+                        ],
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgba(102, 126, 234, 1)',
+                            borderWidth: 1,
+                            cornerRadius: 10
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createChannelChart() {
+            const ctx = document.getElementById('channelChart').getContext('2d');
+            charts.channel = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Direct', 'Social Media', 'Google Ads', 'Email', 'Referral'],
+                    datasets: [{
+                        data: [40, 25, 20, 10, 5],
+                        backgroundColor: [
+                            'rgba(102, 126, 234, 0.8)',
+                            'rgba(76, 175, 80, 0.8)',
+                            'rgba(255, 149, 0, 0.8)',
+                            'rgba(255, 107, 107, 0.8)',
+                            'rgba(23, 162, 184, 0.8)'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createResponseTimeChart() {
+            const ctx = document.getElementById('responseTimeChart').getContext('2d');
+            charts.responseTime = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    datasets: [{
+                        label: 'Avg Response Time (seconds)',
+                        data: [45, 38, 42, 35, 40, 48, 52],
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: 'rgba(102, 126, 234, 1)',
+                        pointBorderColor: 'white',
+                        pointBorderWidth: 2,
+                        pointRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateRealtimeLeads(data) {
+            const container = document.getElementById('realtimeLeads');
+            
+            // Simulate real-time leads
+            const realtimeLeads = [
+                {
+                    name: 'Priya Sharma',
+                    score: 185,
+                    business: 'Restaurant',
+                    time: '2 min ago'
+                },
+                {
+                    name: 'Rajesh Kumar',
+                    score: 220,
+                    business: 'Retail Store',
+                    time: '5 min ago'
+                },
+                {
+                    name: 'Anonymous',
+                    score: 95,
+                    business: 'Café',
+                    time: '12 min ago'
+                }
+            ];
+
+            container.innerHTML = realtimeLeads.map(lead => `
+                <div class="alert-item">
+                    <div class="alert-content">
+                        <strong>${lead.name}</strong><br>
+                        <small>${lead.business} • Score: ${lead.score} • ${lead.time}</small>
+                    </div>
+                    <div class="alert-actions">
+                        <button class="alert-btn" onclick="contactLead('${lead.name}')">
+                            <i class="fas fa-phone"></i>
+                        </button>
+                        <button class="alert-btn" onclick="viewLead('${lead.name}')">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateABTestResults(data) {
+            // A/B test results are already in HTML, but we could update them dynamically
+            // This is where real A/B test data would be displayed
+        }
+
+        function startRealTimeUpdates() {
+            // Update every 30 seconds
+            updateInterval = setInterval(() => {
+                loadDashboardData();
+                updateLastUpdatedTime();
+            }, 30000);
+        }
+
+        function updateLastUpdatedTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = `Updated ${now.toLocaleTimeString()}`;
+        }
+
+        function showLoading() {
+            // Add loading states to charts and metrics
+            document.querySelectorAll('.stat-value').forEach(el => {
+                el.style.opacity = '0.5';
+            });
+        }
+
+        function hideLoading() {
+            document.querySelectorAll('.stat-value').forEach(el => {
+                el.style.opacity = '1';
+            });
+        }
+
+        function showError(message) {
+            // Show error notification
+            console.error(message);
+        }
+
+        function contactLead(name) {
+            alert(`Contacting ${name}...`);
+        }
+
+        function viewLead(name) {
+            alert(`Viewing details for ${name}...`);
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        });
+    </script>
+</body>
+</html>
