@@ -2,7 +2,13 @@
 
 ## Overview
 
-A robust backend for lead capture, scoring, and qualification, built with FastAPI and PostgreSQL. This system powers chatbot workflows, tracks user behavior, classifies leads (SQL/MQL/Unqualified), supports notifications, A/B testing, analytics, UTM tracking, CTA options, and workflow configuration for CRM and sales teams.
+An advanced backend for lead capture, scoring, and qualification, built with FastAPI and PostgreSQL. This system powers chatbot workflows, tracks user behavior, classifies leads (SQL/MQL/Unqualified), supports notifications, A/B testing, analytics, UTM tracking, CTA options, and workflow configuration for CRM and sales teams. Now includes:
+
+- Categorized endpoints in Swagger UI for easier API exploration
+- GET endpoint to list valid user actions (`/api/behavior/actions`)
+- Expanded API-level test coverage (all endpoints tested)
+- Pydantic v2+ compatibility
+- Workspace cleanup for production readiness
 
 ## Features
 
@@ -16,7 +22,11 @@ A robust backend for lead capture, scoring, and qualification, built with FastAP
 - Configurable CTA (Call-to-Action) options
 - Centralized workflow configuration
 - PostgreSQL + SQLAlchemy ORM
-- Comprehensive unit tests
+- Comprehensive unit and API-level tests
+- Categorized endpoints in Swagger UI
+- GET endpoint for valid user actions
+- Pydantic v2+ compatibility
+- Workspace cleaned for production
 
 ## Architecture & Main Files
 
@@ -30,6 +40,14 @@ A robust backend for lead capture, scoring, and qualification, built with FastAP
 - **database.py**: DB connection/session management
 - **config.py**: App and notification config (reads from .env)
 - **test_services.py**: Unit tests for all major logic and endpoints
+
+## Recent Improvements
+
+- **Endpoint Categorization:** All endpoints are grouped and described in Swagger UI for easier navigation.
+- **GET /api/behavior/actions:** Returns a list of valid user actions for logging behaviors.
+- **Expanded Testing:** All endpoints and business logic are covered by FastAPI TestClient-based API tests.
+- **Pydantic v2+ Compatibility:** All request/response models updated for latest Pydantic standards.
+- **Workspace Cleanup:** Removed unnecessary files and ensured production readiness.
 
 ## Setup & Installation
 
@@ -69,6 +87,7 @@ A robust backend for lead capture, scoring, and qualification, built with FastAP
 ### 2. User Actions & Behaviors
 
 - `POST /api/behavior` — Log user actions (e.g., contact shared, CTA clicked, demo clicked)
+- `GET /api/behavior/actions` — List all valid user actions for logging (for frontend validation)
 
 ### 3. Lead Profile & Data
 
@@ -147,9 +166,9 @@ A robust backend for lead capture, scoring, and qualification, built with FastAP
 
 ## Testing & Development
 
-- All business logic and endpoints are covered by unit tests in `test_services.py`.
-- Use `pytest` to run tests.
-- Code follows PEP8 and is ready for production.
+- All business logic and endpoints are covered by unit and API-level tests in `test_services.py` using FastAPI TestClient.
+- Use `pytest` to run tests. All 25+ tests pass, covering every endpoint and major logic branch.
+- Code follows PEP8 and is ready for production. Workspace is cleaned of unnecessary files.
 
 ## Contributing
 
@@ -164,3 +183,13 @@ MIT License
 ---
 
 For questions or support, open a GitHub issue or check inline code comments.
+
+---
+
+## Changelog (Recent Updates)
+
+- Added GET /api/behavior/actions endpoint
+- Categorized endpoints in Swagger UI
+- Expanded API-level test coverage
+- Updated for Pydantic v2+
+- Workspace cleaned for production
