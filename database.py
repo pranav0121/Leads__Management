@@ -4,10 +4,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 import os
 
-# Configure PostgreSQL engine using DATABASE_URL from environment variables
-DATABASE_URL = os.getenv('DATABASE_URL')
+from config import Config
 engine = create_engine(
-    DATABASE_URL,
+    Config.SQLALCHEMY_DATABASE_URI,
     pool_pre_ping=True,
     pool_recycle=300,
     echo=False

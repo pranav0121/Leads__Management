@@ -13,6 +13,12 @@ from models import UserBehavior
 
 
 class ABTestingService:
+
+    @staticmethod
+    def get_variant(session_id):
+        # For demonstration, use 'greeting_message' test
+        test_name = 'greeting_message'
+        return ABTestingService.assign_test_variant(session_id, test_name)
     """A/B testing framework for chatbot optimization"""
 
     # Active A/B tests configuration
@@ -178,7 +184,6 @@ class ABTestingService:
         """Log conversion event for A/B test analysis"""
         try:
             db_session = get_db_session()
-
             conversion_log = UserBehavior(
                 session_id=session_id,
                 action='ab_test_conversion',
@@ -191,16 +196,15 @@ class ABTestingService:
                 }),
                 created_at=datetime.now()
             )
-
             db_session.add(conversion_log)
             db_session.commit()
             db_session.close()
-
             print(
                 f"📊 A/B test conversion logged: {test_name}/{variant}/{conversion_type}")
-
+            return True
         except Exception as e:
             print(f"A/B test conversion logging error: {str(e)}")
+            return False
 
     @staticmethod
     def get_test_results(test_name=None):

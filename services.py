@@ -124,16 +124,20 @@ class LeadService:
                 lead_score=0
             )
             db_session.add(lead)
+            print(
+                f"[DEBUG] Added lead with session_id={session_id} to session. Attempting commit...")
             db_session.commit()
+            print(f"[DEBUG] Commit successful for session_id={session_id}.")
 
             # Log session opened behavior
             ScoringService.log_behavior(session_id, 'session_opened')
 
             return True
         except Exception as e:
-            print(f"Error creating lead: {e}")
             db_session.rollback()
-            return False
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=500, detail=f"Error creating lead: {e}")
         finally:
             db_session.close()
 

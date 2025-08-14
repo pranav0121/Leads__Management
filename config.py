@@ -2,8 +2,9 @@ import os
 
 
 class Config:
+    # Use DATABASE_URL from .env if present, otherwise fallback to default
     SQLALCHEMY_DATABASE_URI = os.getenv(
-        'SQLALCHEMY_DATABASE_URI')
+        'DATABASE_URL', 'postgresql://postgres:pranav@localhost:5433/leads_management')
     DEBUG = True
 
     # Notification Settings

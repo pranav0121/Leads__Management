@@ -29,10 +29,8 @@ class NotificationService:
                 NotificationService.send_slack_notification(lead_data)
                 NotificationService.send_discord_webhook(lead_data)
                 NotificationService.log_notification(lead_data)
-
                 return True
             return False
-
         except Exception as e:
             print(f"Notification error: {str(e)}")
             return False
@@ -50,9 +48,8 @@ class NotificationService:
             phone = lead_data.get('phone', 'Not provided')
 
             subject = f"🔥 HOT LEAD ALERT: {name} (Score: {score})"
-
-                # Removed HTML email body for backend-only implementation
-                html_body = "This is a backend-only implementation. No HTML content is sent."
+            # Removed HTML email body for backend-only implementation
+            html_body = "This is a backend-only implementation. No HTML content is sent."
 
             # Email configuration (you'll need to set these in config.py)
             sender_email = getattr(Config, 'SENDER_EMAIL', 'leads@youshop.com')
