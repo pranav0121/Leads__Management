@@ -93,3 +93,10 @@ static/
 
 # Archive folder (contains old frontend files)
 archive/
+
+# Added unnecessary files and directories
+.pytest_cache/
+.venv/
+__pycache__/
+archive/
+.git/

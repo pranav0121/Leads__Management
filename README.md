@@ -75,6 +75,61 @@ An advanced backend for lead capture, scoring, and qualification, built with Fas
    pytest
    ```
 
+## Setup Instructions
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/pranav0121/Leads__Management.git
+   ```
+
+2. Navigate to the project directory:
+
+   ```bash
+   cd Leads__Management
+   ```
+
+3. Create and activate a virtual environment:
+
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+4. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. Set up the environment variables:
+
+   - Copy `.env.example` to `.env` and fill in the required values.
+
+6. Run the application:
+   ```bash
+   uvicorn main:app --reload
+   ```
+
+## Testing Instructions
+
+1. Run all tests:
+
+   ```bash
+   pytest
+   ```
+
+2. Run tests with detailed output:
+
+   ```bash
+   pytest -v
+   ```
+
+3. Run specific tests:
+   ```bash
+   pytest path/to/test_file.py
+   ```
+
 ## API Endpoints (Categorized)
 
 ### 1. Session & Question Flow

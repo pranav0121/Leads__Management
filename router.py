@@ -1,7 +1,9 @@
+from fastapi import Body
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from services import QuestionService, AnswerService, ScoringService, LeadService
+from services import (QuestionService, AnswerService, ScoringService, LeadService,
+                      CustomerService, PageTrackingService, CIFService, SessionExitService)
 from notification_service import NotificationService
 from ab_testing_service import ABTestingService
 from config import Config
@@ -43,7 +45,11 @@ class ProfileData(BaseModel):
 
 class LeadProfileRequest(BaseModel):
     session_id: str
-    profile_data: ProfileData
+    profile_data: dict
+
+
+class OdooSyncRequest(BaseModel):
+    session_id: str
 
 
 class ABTestVariantRequest(BaseModel):
@@ -68,6 +74,33 @@ class LeadNotificationRequest(BaseModel):
 class NextQuestionRequest(BaseModel):
     session_id: str
     last_question_id: int
+
+
+# New: Customer ID Management Models
+class CustomerIDRequest(BaseModel):
+    session_id: str
+
+
+# New: Customer Information Form Models
+class CIFStartRequest(BaseModel):
+    session_id: str
+    customer_id: str
+
+
+class CIFUpdateRequest(BaseModel):
+    customer_id: str
+    form_data: dict
+    section: Optional[str] = None
+
+
+# New: Session Exit Models
+class SessionExitRequest(BaseModel):
+    session_id: str
+    exit_reason: str = "abandoned"
+    exit_question_id: Optional[int] = None
+    exit_page: Optional[str] = None
+    last_action: Optional[str] = None
+    metadata: Optional[dict] = None
 
 # API Endpoints
 # ...existing code...
@@ -161,10 +194,27 @@ def update_lead_profile(request: LeadProfileRequest):
     if not request.session_id:
         raise HTTPException(status_code=400, detail="Missing session_id")
     success = LeadService.update_lead_profile(
-        request.session_id, request.profile_data.model_dump())
+        request.session_id, request.profile_data)
     if success:
         return {"message": "Profile updated successfully"}
     raise HTTPException(status_code=400, detail="Failed to update profile")
+
+    # Real-time sync to Odoo
+    from services import OdooSyncService
+    odoo_id = OdooSyncService.sync_lead(request.session_id)
+    if odoo_id:
+        return {"message": "Lead profile updated and synced to Odoo", "odoo_lead_id": odoo_id}
+    else:
+        return {"message": "Lead profile updated, but Odoo sync failed"}
+
+
+@router.post("/api/lead/sync-odoo", tags=["CRM Integration"])
+def sync_lead_to_odoo(request: OdooSyncRequest):
+    from services import OdooSyncService
+    odoo_id = OdooSyncService.sync_lead(request.session_id)
+    if odoo_id:
+        return {"message": "Lead synced to Odoo", "odoo_lead_id": odoo_id}
+    raise HTTPException(status_code=500, detail="Odoo sync failed")
 
 
 @router.get("/api/lead/summary/{session_id}", tags=["Lead Profile & Data"])
@@ -247,8 +297,12 @@ def get_leads_analytics():
         completed = 0
         for lead in leads:
             from services import LeadService
-            if LeadService.check_all_questions_answered(lead.session_id):
-                completed += 1
+            try:
+                if LeadService.check_all_questions_answered(lead.session_id):
+                    completed += 1
+            except Exception as e:
+                print(
+                    f"Error checking questions for lead {lead.session_id}: {e}")
         completion_rate = (completed / total_leads * 100) if total_leads else 0
 
         analytics = {
@@ -263,6 +317,7 @@ def get_leads_analytics():
         db_session.close()
         return analytics
     except Exception as e:
+        print(f"Error in analytics endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # ...add other endpoints as needed...
@@ -301,3 +356,247 @@ def notify_lead(request: LeadNotificationRequest):
         status_code=400,
         detail=f"Notification not sent. Lead score is {score}. Must be >= {threshold} to send notification."
     )
+
+
+# New: Customer ID Management Endpoints
+
+@router.post("/api/customer/generate-id", tags=["Customer Management"])
+def generate_customer_id(request: CustomerIDRequest):
+    """Generate and assign a customer ID to a session"""
+    customer_id = CustomerService.assign_customer_id(request.session_id)
+    if customer_id:
+        return {"customer_id": customer_id, "session_id": request.session_id}
+    raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.get("/api/customer/{customer_id}", tags=["Customer Management"])
+def get_customer_details(customer_id: str):
+    """Get complete customer details including journey and CIF data"""
+    details = CustomerService.get_customer_details(customer_id)
+    if details:
+        return details
+    raise HTTPException(status_code=404, detail="Customer not found")
+
+
+# New: Page Tracking Endpoints (GET only for viewing journeys)
+
+
+class PageEntryRequest(BaseModel):
+    session_id: str
+    page_identifier: str
+    question_id: Optional[int] = None
+    page_type: Optional[str] = None
+    metadata: Optional[dict] = None
+
+
+class PageExitRequest(BaseModel):
+    page_tracking_id: int
+    exit_time: Optional[str] = None
+
+
+@router.post("/api/tracking/page-entry", tags=["Page Tracking"])
+def log_page_entry(request: PageEntryRequest):
+    page_tracking_id = PageTrackingService.log_page_entry(
+        request.session_id,
+        request.page_identifier,
+        request.question_id,
+        request.page_type,
+        request.metadata
+    )
+    if page_tracking_id:
+        return {"page_tracking_id": page_tracking_id}
+    raise HTTPException(status_code=400, detail="Failed to log page entry")
+
+
+@router.post("/api/tracking/page-exit", tags=["Page Tracking"])
+def log_page_exit(request: PageExitRequest):
+    success = PageTrackingService.log_page_exit(
+        request.page_tracking_id,
+        None  # Optionally parse exit_time if provided
+    )
+    if success:
+        return {"success": True}
+    raise HTTPException(status_code=400, detail="Failed to log page exit")
+
+
+@router.get("/api/tracking/journey/{session_id}", tags=["Page Tracking"])
+def get_customer_journey(session_id: str):
+    """Get complete page journey for a session"""
+    journey = PageTrackingService.get_customer_journey(session_id)
+    return {"session_id": session_id, "journey": journey}
+
+
+@router.get("/api/tracking/customer-journey/{customer_id}", tags=["Page Tracking"])
+def get_customer_journey_by_id(customer_id: str):
+    """Get complete page journey for a customer by customer ID"""
+    # First get the customer details to find session_id
+    customer_details = CustomerService.get_customer_details(customer_id)
+    if not customer_details:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    session_id = customer_details["session_id"]
+    journey = PageTrackingService.get_customer_journey(session_id)
+
+    return {
+        "customer_id": customer_id,
+        "session_id": session_id,
+        "journey": journey,
+        "summary": {
+            "total_pages_visited": len(journey),
+            "total_time_spent": sum(page.get("time_spent", 0) or 0 for page in journey),
+            "completion_status": "completed" if any(page.get("page_type") == "completion" for page in journey) else "in_progress"
+        }
+    }
+
+
+@router.get("/api/tracking/visual-journey/{identifier}", tags=["Page Tracking"])
+def get_visual_journey(identifier: str, id_type: str = "session"):
+    """Get visual representation of customer journey (session_id or customer_id)"""
+    try:
+        if id_type == "customer":
+            # Get by customer ID
+            customer_details = CustomerService.get_customer_details(identifier)
+            if not customer_details:
+                raise HTTPException(
+                    status_code=404, detail="Customer not found")
+            session_id = customer_details["session_id"]
+            journey = customer_details["page_journey"]
+        else:
+            # Get by session ID
+            session_id = identifier
+            journey = PageTrackingService.get_customer_journey(session_id)
+
+        # Create visual journey representation
+        visual_journey = []
+        for i, page in enumerate(journey):
+            visual_page = {
+                "step": i + 1,
+                "page_name": page.get("page", "Unknown"),
+                "question_id": page.get("question_id"),
+                "entry_time": page.get("entry_time"),
+                "exit_time": page.get("exit_time"),
+                "time_spent_seconds": page.get("time_spent", 0),
+                "time_spent_formatted": f"{page.get('time_spent', 0) or 0}s",
+                "page_type": page.get("page_type", "unknown"),
+                "status": "completed" if page.get("exit_time") else "current"
+            }
+            visual_journey.append(visual_page)
+
+        # Calculate journey statistics
+        total_time = sum(page.get("time_spent", 0) or 0 for page in journey)
+        avg_time_per_page = total_time / len(journey) if journey else 0
+
+        return {
+            "identifier": identifier,
+            "id_type": id_type,
+            "session_id": session_id,
+            "visual_journey": visual_journey,
+            "statistics": {
+                "total_pages": len(journey),
+                "total_time_seconds": total_time,
+                "total_time_formatted": f"{total_time // 60}m {total_time % 60}s",
+                "average_time_per_page": f"{avg_time_per_page:.1f}s",
+                "completion_rate": f"{(len([p for p in journey if p.get('exit_time')]) / len(journey) * 100):.1f}%" if journey else "0%"
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=f"Error retrieving journey: {str(e)}")
+
+
+# New: Customer Information Form (CIF) Endpoints
+
+@router.post("/api/cif/start", tags=["Customer Information Form"])
+def start_cif(request: CIFStartRequest):
+    """Start CIF process for a customer"""
+    cif_id = CIFService.start_cif(request.session_id, request.customer_id)
+    if cif_id:
+        return {"message": "CIF started", "cif_id": cif_id, "customer_id": request.customer_id}
+    raise HTTPException(status_code=400, detail="Failed to start CIF")
+
+
+@router.put("/api/cif/update", tags=["Customer Information Form"])
+def update_cif(request: CIFUpdateRequest):
+    """Update CIF data for a customer"""
+    success = CIFService.update_cif_data(
+        request.customer_id,
+        request.form_data,
+        request.section
+    )
+    if success:
+        return {"message": "CIF updated successfully", "customer_id": request.customer_id}
+    raise HTTPException(status_code=400, detail="Failed to update CIF")
+
+
+@router.post("/api/cif/complete", tags=["Customer Information Form"])
+def complete_cif(request: CIFUpdateRequest):
+    """Mark CIF as completed and update final data"""
+    success = CIFService.update_cif_data(
+        request.customer_id, request.form_data)
+    if success:
+        return {"message": "CIF completed successfully", "customer_id": request.customer_id}
+    raise HTTPException(status_code=400, detail="Failed to complete CIF")
+
+
+@router.get("/api/cif/{customer_id}", tags=["Customer Information Form"])
+def get_cif_data(customer_id: str):
+    """Get CIF data for a customer"""
+    cif_data = CIFService.get_cif_data(customer_id)
+    if cif_data:
+        return cif_data
+    raise HTTPException(status_code=404, detail="CIF data not found")
+
+
+# New: Session Exit Tracking Endpoints
+
+@router.post("/api/session/exit", tags=["Session Management"])
+def log_session_exit(request: SessionExitRequest):
+    """Log session exit/abandonment"""
+    exit_id = SessionExitService.log_session_exit(
+        request.session_id,
+        request.exit_reason,
+        request.exit_question_id,
+        request.exit_page,
+        request.last_action,
+        request.metadata
+    )
+    if exit_id:
+        return {"message": "Session exit logged", "exit_id": exit_id}
+    raise HTTPException(status_code=400, detail="Failed to log session exit")
+
+
+# New: Advanced Analytics Endpoints
+
+@router.get("/api/analytics/drop-off-points", tags=["Advanced Analytics"])
+def get_drop_off_analytics():
+    """Get analytics on where users typically abandon sessions"""
+    analytics = SessionExitService.get_abandonment_analytics()
+    return analytics
+
+
+@router.get("/api/analytics/page-performance", tags=["Advanced Analytics"])
+def get_page_performance():
+    """Get page-wise engagement metrics"""
+    from services import PageTrackingService
+    # Example: Aggregate page views, avg time, conversion rates
+    analytics = PageTrackingService.get_page_performance_analytics()
+    return analytics
+
+
+@router.get("/api/analytics/customer-journey", tags=["Advanced Analytics"])
+def get_journey_analytics():
+    """Get journey analysis across all customers"""
+    from services import PageTrackingService
+    # Example: Aggregate journeys for all customers
+    analytics = PageTrackingService.get_all_customer_journeys()
+    return analytics
+
+
+@router.get("/api/analytics/cif-completion", tags=["Advanced Analytics"])
+def get_cif_completion_analytics():
+    """Get CIF completion rates and analytics"""
+    from services import CIFService
+    # Example: Aggregate CIF completion rates and breakdowns
+    analytics = CIFService.get_cif_completion_analytics()
+    return analytics

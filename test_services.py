@@ -1,9 +1,10 @@
 import pytest
-from models import Lead, Answer, UserBehavior
+from models import Lead, Answer, UserBehavior, CustomerInformationForm, PageTracking, SessionExit
 from database import get_db_session
 from notification_service import NotificationService
 from ab_testing_service import ABTestingService
-from services import LeadService, QuestionService, ScoringService, AnswerService
+from services import (LeadService, QuestionService, ScoringService, AnswerService,
+                      CustomerService, PageTrackingService, CIFService, SessionExitService)
 from fastapi.testclient import TestClient
 from main import app
 
@@ -302,3 +303,309 @@ def test_notification_service():
     result = NotificationService.notify_sales_team(lead_data)
     # Accept both for stubbed notifications
     assert result is True or result is False
+
+
+# New: Customer ID Management Tests
+
+def test_customer_id_generation():
+    """Test customer ID generation and assignment"""
+    # Start a session first
+    session_response = client.post(
+        "/api/session/start", json={"utm_source": "test"})
+    session_id = session_response.json()["session_id"]
+
+    # Generate customer ID
+    response = client.post("/api/customer/generate-id",
+                           json={"session_id": session_id})
+    assert response.status_code == 200
+    assert "customer_id" in response.json()
+    assert response.json()["customer_id"].startswith("CID_")
+
+    customer_id = response.json()["customer_id"]
+
+    # Test getting customer details
+    details_response = client.get(f"/api/customer/{customer_id}")
+    assert details_response.status_code == 200
+    assert details_response.json()["customer_id"] == customer_id
+
+
+def test_page_tracking_endpoints():
+    """Test page tracking functionality"""
+    # Start a session first
+    session_response = client.post(
+        "/api/session/start", json={"utm_source": "test"})
+    session_id = session_response.json()["session_id"]
+
+    # Log page entry
+    entry_response = client.post("/api/tracking/page-entry", json={
+        "session_id": session_id,
+        "page_identifier": "question_1",
+        "question_id": 1,
+        "page_type": "question",
+        "metadata": {"test": "data"}
+    })
+    assert entry_response.status_code == 200
+    assert "page_tracking_id" in entry_response.json()
+
+    page_tracking_id = entry_response.json()["page_tracking_id"]
+
+    # Log page exit
+    exit_response = client.post("/api/tracking/page-exit", json={
+        "page_tracking_id": page_tracking_id
+    })
+    assert exit_response.status_code == 200
+
+    # Get customer journey
+    journey_response = client.get(f"/api/tracking/journey/{session_id}")
+    assert journey_response.status_code == 200
+    assert "journey" in journey_response.json()
+    assert len(journey_response.json()["journey"]) >= 1
+
+
+def test_cif_endpoints():
+    """Test Customer Information Form endpoints"""
+    # Start a session and get customer ID
+    session_response = client.post(
+        "/api/session/start", json={"utm_source": "test"})
+    session_id = session_response.json()["session_id"]
+
+    customer_response = client.post(
+        "/api/customer/generate-id", json={"session_id": session_id})
+    customer_id = customer_response.json()["customer_id"]
+
+    # Start CIF
+    start_response = client.post("/api/cif/start", json={
+        "session_id": session_id,
+        "customer_id": customer_id
+    })
+    assert start_response.status_code == 200
+
+    # Update CIF data
+    cif_data = {
+        "basic_info": {
+            "full_name": "Test Customer",
+            "email": "test@example.com",
+            "phone": "9876543210"
+        }
+    }
+    update_response = client.put("/api/cif/update", json={
+        "customer_id": customer_id,
+        "form_data": cif_data,
+        "section": "basic_info"
+    })
+    assert update_response.status_code == 200
+
+    # Get CIF data
+    get_response = client.get(f"/api/cif/{customer_id}")
+    assert get_response.status_code == 200
+    assert "form_data" in get_response.json()
+    assert "completion_percentage" in get_response.json()
+
+
+def test_session_exit_endpoint():
+    """Test session exit tracking"""
+    # Start a session first
+    session_response = client.post(
+        "/api/session/start", json={"utm_source": "test"})
+    session_id = session_response.json()["session_id"]
+
+    # Log session exit
+    exit_response = client.post("/api/session/exit", json={
+        "session_id": session_id,
+        "exit_reason": "abandoned",
+        "exit_question_id": 3,
+        "exit_page": "question_3",
+        "last_action": "clicked_back",
+        "metadata": {"reason": "too_many_questions"}
+    })
+    assert exit_response.status_code == 200
+    assert "exit_id" in exit_response.json()
+
+
+def test_advanced_analytics_endpoints():
+    # Drop-off points
+    resp = client.get("/api/analytics/drop-off-points")
+    assert resp.status_code == 200
+    assert "common_exit_points" in resp.json()
+    assert "completion_by_reason" in resp.json()
+
+    # Page performance
+    resp = client.get("/api/analytics/page-performance")
+    assert resp.status_code == 200
+    assert "page_performance" in resp.json()
+
+    # Customer journey
+    resp = client.get("/api/analytics/customer-journey")
+    assert resp.status_code == 200
+    assert "customer_journeys" in resp.json()
+
+    # CIF completion
+    resp = client.get("/api/analytics/cif-completion")
+    assert resp.status_code == 200
+    assert "total_cif" in resp.json()
+    assert "completed_cif" in resp.json()
+    assert "avg_completion_percentage" in resp.json()
+
+
+# Service-level tests for new functionality
+
+def test_customer_service():
+    """Test CustomerService functionality"""
+    import uuid
+    session_id = f"test-customer-service-{uuid.uuid4()}"
+
+    # Create a lead first
+    db = get_db_session()
+    try:
+        lead = Lead(session_id=session_id, utm_source="test")
+        db.add(lead)
+        db.commit()
+
+        # Test customer ID assignment
+        customer_id = CustomerService.assign_customer_id(session_id)
+        assert customer_id is not None
+        assert customer_id.startswith("CID_")
+
+        # Test getting customer details
+        details = CustomerService.get_customer_details(customer_id)
+        assert details is not None
+        assert details["customer_id"] == customer_id
+        assert details["session_id"] == session_id
+
+    finally:
+        # Cleanup
+        try:
+            db.query(Lead).filter_by(session_id=session_id).delete()
+            db.commit()
+        except:
+            db.rollback()
+        db.close()    # Cleanup
+    db.query(Lead).filter_by(session_id=session_id).delete()
+    db.commit()
+    db.close()
+
+
+def test_page_tracking_service():
+    """Test PageTrackingService functionality"""
+    import uuid
+    session_id = f"test-page-tracking-{uuid.uuid4()}"
+
+    # Create a lead first
+    db = get_db_session()
+    try:
+        lead = Lead(session_id=session_id, utm_source="test")
+        db.add(lead)
+        db.commit()
+
+        # Test page entry logging
+        page_id = PageTrackingService.log_page_entry(
+            session_id, "test_page", question_id=1, page_type="question"
+        )
+        assert page_id is not None
+
+        # Test page exit logging
+        success = PageTrackingService.log_page_exit(page_id)
+        assert success is True
+
+        # Test getting journey
+        journey = PageTrackingService.get_customer_journey(session_id)
+        assert len(journey) >= 1
+        assert journey[0]["page"] == "test_page"
+
+    finally:
+        # Cleanup
+        try:
+            db.query(PageTracking).filter_by(session_id=session_id).delete()
+            db.query(Lead).filter_by(session_id=session_id).delete()
+            db.commit()
+        except:
+            db.rollback()
+        db.close()
+
+
+def test_cif_service():
+    """Test CIFService functionality"""
+    import uuid
+    session_id = f"test-cif-service-{uuid.uuid4()}"
+    customer_id = f"CID_TEST_{uuid.uuid4().hex[:8].upper()}"
+
+    # Create a lead first
+    db = get_db_session()
+    try:
+        lead = Lead(session_id=session_id,
+                    customer_id=customer_id, utm_source="test")
+        db.add(lead)
+        db.commit()
+
+        # Test CIF start
+        cif_id = CIFService.start_cif(session_id, customer_id)
+        assert cif_id is not None
+
+        # Test CIF data update
+        form_data = {
+            "basic_info": {
+                "full_name": "Test User",
+                "email": "test@example.com",
+                "phone": "9876543210"
+            }
+        }
+        success = CIFService.update_cif_data(
+            customer_id, form_data, "basic_info")
+        assert success is True
+
+        # Test getting CIF data
+        cif_data = CIFService.get_cif_data(customer_id)
+        assert cif_data is not None
+        assert cif_data["customer_id"] == customer_id
+        assert "completion_percentage" in cif_data
+
+    finally:
+        # Cleanup
+        try:
+            db.query(CustomerInformationForm).filter_by(
+                customer_id=customer_id).delete()
+            db.query(Lead).filter_by(session_id=session_id).delete()
+            db.commit()
+        except:
+            db.rollback()
+        db.close()
+
+
+def test_session_exit_service():
+    """Test SessionExitService functionality"""
+    import uuid
+    session_id = f"test-session-exit-{uuid.uuid4()}"
+
+    # Create a lead first
+    db = get_db_session()
+    try:
+        lead = Lead(session_id=session_id, utm_source="test")
+        db.add(lead)
+        db.commit()
+
+        # Test session exit logging
+        exit_id = SessionExitService.log_session_exit(
+            session_id, "abandoned", exit_question_id=2, exit_page="question_2"
+        )
+        assert exit_id is not None
+
+        # Test abandonment analytics
+        analytics = SessionExitService.get_abandonment_analytics()
+        assert "common_exit_points" in analytics
+        assert "completion_by_reason" in analytics
+
+    finally:
+        # Cleanup
+        try:
+            db.query(SessionExit).filter_by(session_id=session_id).delete()
+            db.query(Lead).filter_by(session_id=session_id).delete()
+            db.commit()
+        except:
+            db.rollback()
+        db.close()
+
+    # Cleanup
+    db.query(SessionExit).filter_by(session_id=session_id).delete()
+    db.query(Lead).filter_by(session_id=session_id).delete()
+    db.commit()
+    db.close()
