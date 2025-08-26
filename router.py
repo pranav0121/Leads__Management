@@ -45,7 +45,16 @@ class ProfileData(BaseModel):
 
 class LeadProfileRequest(BaseModel):
     session_id: str
-    profile_data: dict
+    profile_data: dict = {
+        "name": "string",
+        "email": "string",
+        "phone": "string",
+        "business_type": "string",
+        "location": "string",
+        "staff_size": "string",
+        "monthly_sales": "string",
+        "features_interested": ["string"]
+    }
 
 
 class OdooSyncRequest(BaseModel):

@@ -4,7 +4,7 @@ from database import get_db_session
 from notification_service import NotificationService
 from ab_testing_service import ABTestingService
 from services import (LeadService, QuestionService, ScoringService, AnswerService,
-                      CustomerService, PageTrackingService, CIFService, SessionExitService)
+                      CustomerService, PageTrackingService, CIFService, SessionExitService, OdooSyncService)
 from fastapi.testclient import TestClient
 from main import app
 
@@ -609,3 +609,37 @@ def test_session_exit_service():
     db.query(Lead).filter_by(session_id=session_id).delete()
     db.commit()
     db.close()
+
+
+def test_update_lead_score():
+    """Test LeadService.update_lead_score functionality"""
+    session_id = "test_session"
+    score = 10
+    success = LeadService.update_lead_score(session_id, score)
+    assert success is True
+
+
+def test_log_answer():
+    """Test AnswerService.log_answer functionality"""
+    session_id = "test_session"
+    question_id = 1
+    answer_text = "Sample Answer"
+    time_taken = 15
+    success, score = AnswerService.log_answer(session_id, question_id, answer_text, time_taken)
+    assert success is True
+    assert score > 0
+
+
+def test_get_cif_completion_analytics():
+    """Test CIFService.get_cif_completion_analytics functionality"""
+    analytics = CIFService.get_cif_completion_analytics()
+    assert analytics['total_cif'] >= 0
+    assert analytics['completed_cif'] >= 0
+    assert analytics['avg_completion_percentage'] >= 0.0
+
+
+def test_odoo_sync_lead():
+    """Test OdooSyncService.sync_lead functionality"""
+    session_id = "test_session"
+    lead_id = OdooSyncService.sync_lead(session_id)
+    assert lead_id is not None

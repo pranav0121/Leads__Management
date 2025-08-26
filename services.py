@@ -5,12 +5,27 @@ from datetime import datetime, date
 from models import Question, Answer, Lead, UserBehavior, CustomerInformationForm, PageTracking, SessionExit
 from database import get_db_session
 from workflow_config import WORKFLOW_CONFIG
+import time
+import traceback
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("app.log"),
+        logging.StreamHandler()
+    ]
+)
+
+logging.info("Test log entry")
 
 
 class QuestionService:
     @staticmethod
     def get_questions():
         """Fetch predefined questions from configuration."""
+        logging.info("Fetching predefined questions from configuration.")
         return WORKFLOW_CONFIG['questions_workflow']
 
 
@@ -20,6 +35,9 @@ class AnswerService:
         """Log a single answer to the database."""
         db_session = get_db_session()
         try:
+            logging.info(f"Logging answer for session_id={session_id}, question_id={question_id}.")
+            logging.debug(f"Answer details: {answer_text}, time_taken={time_taken}.")
+
             # Calculate score for this answer
             score = ScoringService.calculate_answer_score(
                 question_id, answer_text, time_taken)
@@ -39,7 +57,7 @@ class AnswerService:
             db_session.commit()
             return True, score
         except Exception as e:
-            print(f"Error logging answer: {e}")
+            logging.error(f"Error logging answer: {e}")
             db_session.rollback()
             return False, 0
         finally:
@@ -60,6 +78,8 @@ class ScoringService:
     @staticmethod
     def calculate_answer_score(question_id, answer_text, time_taken=None):
         """Calculate score for a specific answer."""
+        logging.info("Calculating score for answer.")
+        logging.debug(f"Question ID: {question_id}, Answer Text: {answer_text}, Time Taken: {time_taken}.")
         scoring_map = ScoringService.get_scoring_map()
         base_score = 5  # Default base score
         bonus_score = 0
@@ -79,6 +99,9 @@ class ScoringService:
         """Log user behavior and return score change."""
         db_session = get_db_session()
         try:
+            logging.info(f"Logging user behavior for session_id={session_id}, action={action}.")
+            logging.debug(f"Behavior metadata: {metadata}.")
+
             scoring_map = ScoringService.get_scoring_map()
             score_change = scoring_map.get(action, 0)
 
@@ -96,7 +119,7 @@ class ScoringService:
             db_session.commit()
             return score_change
         except Exception as e:
-            print(f"Error logging behavior: {e}")
+            logging.error(f"Error logging behavior: {e}")
             db_session.rollback()
             return 0
         finally:
@@ -120,6 +143,9 @@ class LeadService:
         """Create a new lead session."""
         db_session = get_db_session()
         try:
+            logging.info(f"Creating lead for session_id={session_id}, utm_source={utm_source}.")
+            logging.debug(f"Lead details: session_id={session_id}, utm_source={utm_source}.")
+
             lead = Lead(
                 session_id=session_id,
                 utm_source=utm_source,
@@ -136,6 +162,7 @@ class LeadService:
 
             return True
         except Exception as e:
+            logging.error(f"Error creating lead: {e}")
             db_session.rollback()
             from fastapi import HTTPException
             raise HTTPException(
@@ -166,23 +193,39 @@ class LeadService:
         """Update lead profile information."""
         db_session = get_db_session()
         try:
-            lead = db_session.query(Lead).filter_by(
-                session_id=session_id).first()
+            start_time = time.time()
+            lead = db_session.query(Lead).filter_by(session_id=session_id).first()
+            end_time = time.time()
+            logging.info(f"Query execution time: {end_time - start_time} seconds")
+
             if lead:
+                logging.info(f"Updating lead with session_id: {session_id}")
+                logging.debug(f"Profile data: {profile_data}")
+
                 # Update lead attributes from profile data
                 for key, value in profile_data.items():
                     if hasattr(lead, key):
+                        old_value = getattr(lead, key)
+                        logging.info(f"Updating {key}: {old_value} -> {value}")
                         if key == 'features_interested' and isinstance(value, list):
                             setattr(lead, key, json.dumps(value))
                         else:
                             setattr(lead, key, value)
+
+                logging.debug(f"Lead data before commit: {lead.__dict__}")
                 db_session.commit()
+                logging.info("Lead updated successfully.")
                 return True
+
+            logging.warning("Lead not found.")
             return False
+
         except Exception as e:
-            print(f"Error updating lead profile: {e}")
+            logging.error(f"Error updating lead profile: {e}")
+            logging.error(traceback.format_exc())
             db_session.rollback()
             return False
+
         finally:
             db_session.close()
 
@@ -261,12 +304,23 @@ class OdooSyncService:
         user_id = int(os.getenv("ODOO_USER_ID", "5"))
         lead_data["user_id"] = user_id
         try:
+            # Connect to Odoo XML-RPC
             common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
+            
+            # Authenticate
             uid = common.authenticate(db, username, password, {})
+            if not uid:
+                print("Odoo authentication failed")
+                return None
+            
+            # Create the lead
             models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")
             lead_id = models.execute_kw(
                 db, uid, password, 'crm.lead', 'create', [lead_data])
+            
+            print(f"Successfully created lead in Odoo with ID: {lead_id}")
             return lead_id
+            
         except Exception as e:
             print(f"Odoo sync failed: {e}")
             return None

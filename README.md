@@ -231,16 +231,6 @@ An advanced backend for lead capture, scoring, and qualification, built with Fas
 - Add tests for new features.
 - Use clear commit messages.
 
-## License
-
-MIT License
-
----
-
-For questions or support, open a GitHub issue or check inline code comments.
-
----
-
 ## Changelog (Recent Updates)
 
 - Added GET /api/behavior/actions endpoint
