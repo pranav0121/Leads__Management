@@ -21,9 +21,13 @@ class SessionStartRequest(BaseModel):
 
 class LogAnswerRequest(BaseModel):
     session_id: str
-    question_id: int
     answer_text: str
     time_taken: Optional[float] = None
+
+
+class SkipQuestionRequest(BaseModel):
+    session_id: str
+    skip_reason: str = "user_skipped"
 
 
 class LogBehaviorRequest(BaseModel):
@@ -169,13 +173,28 @@ def get_questions():
 
 @router.post("/api/answer", tags=["Session & Question Flow"])
 def log_answer(request: LogAnswerRequest):
-    if not all([request.session_id, request.question_id, request.answer_text]):
+    if not all([request.session_id, request.answer_text]):
         raise HTTPException(status_code=400, detail="Missing required fields")
     success, score = AnswerService.log_answer(
-        request.session_id, request.question_id, request.answer_text, request.time_taken)
+        request.session_id, request.answer_text, request.time_taken)
     if success:
         return {"message": "Answer logged successfully", "score_earned": score}
     raise HTTPException(status_code=400, detail="Failed to log answer")
+
+
+@router.post("/api/skip-question", tags=["Session & Question Flow"])
+def skip_question(request: SkipQuestionRequest):
+    """
+    Allow users to skip questions without penalty.
+    """
+    if not request.session_id:
+        raise HTTPException(status_code=400, detail="Missing session_id")
+
+    # Log the skip as a behavior for tracking
+    score_change = ScoringService.log_behavior(
+        request.session_id, "question_skipped", {"reason": request.skip_reason})
+
+    return {"message": "Question skipped successfully", "score_change": score_change}
 
 
 @router.post("/api/behavior", tags=["User Actions & Behaviors"])

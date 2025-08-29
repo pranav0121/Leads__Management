@@ -62,10 +62,16 @@ An advanced backend for lead capture, scoring, and qualification, built with Fas
 2. **Configure Database**
    - Create a PostgreSQL DB and user
    - Set credentials in `.env`
-3. **Run Migrations**
+3. **Run Migrations (Important for existing databases)**
+
    ```bash
+   # For new installations
    python -c "from database import Base, engine; Base.metadata.create_all(engine)"
+
+   # For existing databases with old answer structure, run migration first
+   python migrate_answers_table.py
    ```
+
 4. **Start API Server**
    ```bash
    uvicorn main:app --reload
@@ -137,7 +143,8 @@ An advanced backend for lead capture, scoring, and qualification, built with Fas
 - `POST /api/session/start` — Start a new lead session (returns session_id)
 - `GET /api/questions` — Get the full list of questions (for custom flows or review)
 - `POST /api/next-question` — Get the next unanswered required question after answering (for guided flows)
-- `POST /api/answer` — Log an answer to a question
+- `POST /api/answer` — Log an answer to a question (simplified: only session_id and answer_text required)
+- `POST /api/skip-question` — Allow users to skip questions without penalty
 
 ### 2. User Actions & Behaviors
 
@@ -233,6 +240,9 @@ An advanced backend for lead capture, scoring, and qualification, built with Fas
 
 ## Changelog (Recent Updates)
 
+- **Simplified Answer Structure**: Answers table now only contains session_id, answer_text, and created_at columns
+- **Skip Question Feature**: Added `/api/skip-question` endpoint allowing users to skip questions without penalty
+- **Flexible Question Flow**: Users can now skip any question and continue with the flow
 - Added GET /api/behavior/actions endpoint
 - Categorized endpoints in Swagger UI
 - Expanded API-level test coverage

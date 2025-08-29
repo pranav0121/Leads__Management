@@ -31,23 +31,21 @@ class QuestionService:
 
 class AnswerService:
     @staticmethod
-    def log_answer(session_id, question_id, answer_text, time_taken=None):
+    def log_answer(session_id, answer_text, time_taken=None):
         """Log a single answer to the database."""
         db_session = get_db_session()
         try:
-            logging.info(f"Logging answer for session_id={session_id}, question_id={question_id}.")
-            logging.debug(f"Answer details: {answer_text}, time_taken={time_taken}.")
+            logging.info(f"Logging answer for session_id={session_id}.")
+            logging.debug(
+                f"Answer details: {answer_text}, time_taken={time_taken}.")
 
-            # Calculate score for this answer
+            # Calculate score for this answer using simplified scoring
             score = ScoringService.calculate_answer_score(
-                question_id, answer_text, time_taken)
+                answer_text, time_taken)
 
             new_answer = Answer(
                 session_id=session_id,
-                question_id=question_id,
-                answer_text=answer_text,
-                time_taken=time_taken,
-                score_earned=score
+                answer_text=answer_text
             )
             db_session.add(new_answer)
 
@@ -76,10 +74,10 @@ class ScoringService:
         return WORKFLOW_CONFIG['lead_thresholds']
 
     @staticmethod
-    def calculate_answer_score(question_id, answer_text, time_taken=None):
-        """Calculate score for a specific answer."""
+    def calculate_answer_score(answer_text, time_taken=None):
+        """Calculate score for a specific answer (simplified version)."""
         logging.info("Calculating score for answer.")
-        logging.debug(f"Question ID: {question_id}, Answer Text: {answer_text}, Time Taken: {time_taken}.")
+        logging.debug(f"Answer Text: {answer_text}, Time Taken: {time_taken}.")
         scoring_map = ScoringService.get_scoring_map()
         base_score = 5  # Default base score
         bonus_score = 0
@@ -88,8 +86,8 @@ class ScoringService:
         if len(answer_text.strip()) > 10:
             bonus_score += scoring_map['detailed_answer']
 
-        # Bonus for quick replies (< 120 seconds)
-        if time_taken and time_taken < 120:
+        # Bonus for quick replies (< 20 seconds)
+        if time_taken and time_taken < 20:
             bonus_score += scoring_map['quick_reply']
 
         return base_score + bonus_score
@@ -99,7 +97,8 @@ class ScoringService:
         """Log user behavior and return score change."""
         db_session = get_db_session()
         try:
-            logging.info(f"Logging user behavior for session_id={session_id}, action={action}.")
+            logging.info(
+                f"Logging user behavior for session_id={session_id}, action={action}.")
             logging.debug(f"Behavior metadata: {metadata}.")
 
             scoring_map = ScoringService.get_scoring_map()
@@ -143,8 +142,10 @@ class LeadService:
         """Create a new lead session."""
         db_session = get_db_session()
         try:
-            logging.info(f"Creating lead for session_id={session_id}, utm_source={utm_source}.")
-            logging.debug(f"Lead details: session_id={session_id}, utm_source={utm_source}.")
+            logging.info(
+                f"Creating lead for session_id={session_id}, utm_source={utm_source}.")
+            logging.debug(
+                f"Lead details: session_id={session_id}, utm_source={utm_source}.")
 
             lead = Lead(
                 session_id=session_id,
@@ -182,9 +183,12 @@ class LeadService:
                 lead.lead_type = ScoringService.calculate_lead_type(
                     lead.lead_score)
                 db_session.commit()
+                return True
+            return False
         except Exception as e:
             print(f"Error updating lead score: {e}")
             db_session.rollback()
+            return False
         finally:
             db_session.close()
 
@@ -194,9 +198,11 @@ class LeadService:
         db_session = get_db_session()
         try:
             start_time = time.time()
-            lead = db_session.query(Lead).filter_by(session_id=session_id).first()
+            lead = db_session.query(Lead).filter_by(
+                session_id=session_id).first()
             end_time = time.time()
-            logging.info(f"Query execution time: {end_time - start_time} seconds")
+            logging.info(
+                f"Query execution time: {end_time - start_time} seconds")
 
             if lead:
                 logging.info(f"Updating lead with session_id: {session_id}")
@@ -306,52 +312,47 @@ class OdooSyncService:
         try:
             # Connect to Odoo XML-RPC
             common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
-            
+
             # Authenticate
             uid = common.authenticate(db, username, password, {})
             if not uid:
                 print("Odoo authentication failed")
                 return None
-            
+
             # Create the lead
             models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")
             lead_id = models.execute_kw(
                 db, uid, password, 'crm.lead', 'create', [lead_data])
-            
+
             print(f"Successfully created lead in Odoo with ID: {lead_id}")
             return lead_id
-            
+
         except Exception as e:
             print(f"Odoo sync failed: {e}")
             return None
 
     @staticmethod
     def check_all_questions_answered(session_id):
-        """Check if all required questions have been answered."""
+        """Check if user has provided a reasonable number of answers (simplified approach)"""
         db_session = get_db_session()
         try:
-            # Get all required questions
-            questions = QuestionService.get_questions()
-            required_questions = [q['id']
-                                  for q in questions if q.get('required', True)]
+            # Count total answers provided by the user
+            answer_count = db_session.query(Answer).filter_by(
+                session_id=session_id).count()
 
-            # Get answered questions for this session
-            answered_questions = db_session.query(Answer.question_id).filter_by(
-                session_id=session_id).distinct().all()
-            answered_question_ids = [row[0] for row in answered_questions]
+            # If user has provided at least 3 answers, consider it complete
+            # This allows for flexibility with skipping questions
+            min_answers_required = 3
 
-            # Check if all required questions are answered
-            all_answered = all(
-                qid in answered_question_ids for qid in required_questions)
-
-            if all_answered:
-                # Award bonus for completing all questions
+            if answer_count >= min_answers_required:
+                # Award bonus for providing sufficient answers
                 ScoringService.log_behavior(
                     session_id, 'answered_all_questions')
+                return True
 
-            return all_answered
+            return False
         except Exception as e:
-            print(f"Error checking questions completion: {e}")
+            print(f"Error checking answers for session {session_id}: {e}")
             return False
         finally:
             db_session.close()
@@ -833,15 +834,20 @@ class SessionExitService:
                                   for q in questions if q.get('required', True)]
             total_required = len(required_questions)
 
-            # Get answered questions
+            # Get total answers provided (simplified approach)
             answered_count = db_session.query(Answer).filter_by(
                 session_id=session_id
-            ).distinct(Answer.question_id).count()
+            ).count()
 
-            if total_required == 0:
+            # Use a reasonable baseline for completion calculation
+            max_expected_answers = 7  # Based on typical question flow
+
+            if max_expected_answers == 0:
                 return 100.0
 
-            return (answered_count / total_required) * 100.0
+            completion_percentage = min(
+                (answered_count / max_expected_answers) * 100.0, 100.0)
+            return completion_percentage
         except Exception as e:
             print(f"Error calculating session completion: {e}")
             return 0.0

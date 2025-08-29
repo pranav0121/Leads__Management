@@ -11,12 +11,13 @@ WORKFLOW_CONFIG = {
         "clicked_pricing": 10,
         "clicked_demo": 15,
         "meaningful_reply": 10,
-        "quick_reply": 5,  # < 2 minutes
+        "quick_reply": 5,  # < 20 seconds
         "detailed_answer": 5,  # > 10 characters
         "cta_clicked": 15,
         "early_dropout": -10,
         "ignored_cta": 0,
-        "completed_journey": 10
+        "completed_journey": 10,
+        "question_skipped": 0  # No penalty for skipping questions
     },
 
     "lead_thresholds": {
