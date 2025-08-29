@@ -16,6 +16,7 @@ class Answer(Base):
 
     id = Column(Integer, primary_key=True)
     session_id = Column(String, nullable=False)
+    question_id = Column(Integer, nullable=False)
     answer_text = Column(Text, nullable=False)
     created_at = Column(DateTime, default=func.now())
 

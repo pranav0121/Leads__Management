@@ -2,6 +2,10 @@
 from fastapi.middleware.cors import CORSMiddleware
 from database import Base, engine
 from router import router
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = FastAPI()
 

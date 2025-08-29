@@ -99,6 +99,26 @@ WORKFLOW_CONFIG = {
         }
     ],
 
+    # Special responses for greeting question
+    "greeting_responses": {
+        "What is this about?": {
+            "response_type": "about_info",
+            "title": "About YouShop/YouResto",
+            "content": "YouShop/YouResto is your all-in-one smart business partner designed to help small and medium businesses thrive in today's digital world.\n\n🚀 **What we offer:**\n• Digital billing & invoicing (GST compliant)\n• QR code payments & digital transactions\n• Inventory management\n• Staff & HR management\n• Online store creation\n• WhatsApp business tools\n• Business loans & financial solutions\n\n💡 **Why choose us:**\n• Easy to use, works offline\n• Affordable pricing for all business sizes\n• 24/7 customer support\n• Trusted by thousands of businesses\n\nWould you like to see how we can help your specific business? Just let us know what type of business you run!",
+            "next_action": "continue_to_business_type"
+        },
+        "No thanks": {
+            "response_type": "thank_you",
+            "title": "Thank You!",
+            "content": "Thank you for your time! 🙏\n\nWe understand that every business has different needs and timing. If you ever want to explore how YouShop/YouResto can help grow your business, we'll be here.\n\n📞 **Quick ways to reach us:**\n• Call: +91-XXXXXXXXX\n• WhatsApp: +91-XXXXXXXXX\n• Email: support@youshop.com\n\n🎁 **Special offer:** When you're ready, mention code 'WELCOME20' for 20% off your first month!\n\nWishing you success in your business journey! 🌟",
+            "next_action": "end_session"
+        },
+        "Yes, go ahead": {
+            "response_type": "continue_flow",
+            "next_action": "continue_to_business_type"
+        }
+    },
+
     "product_menu": [
         {"id": "billing", "title": "📊 Billing & Invoicing",
             "description": "GST-compliant billing and invoicing", "score": 5},

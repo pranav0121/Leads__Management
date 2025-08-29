@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from services import (QuestionService, AnswerService, ScoringService, LeadService,
-                      CustomerService, PageTrackingService, CIFService, SessionExitService)
+                      CustomerService, PageTrackingService, CIFService, SessionExitService, ConditionalResponseService)
 from notification_service import NotificationService
 from ab_testing_service import ABTestingService
 from config import Config
@@ -21,6 +21,7 @@ class SessionStartRequest(BaseModel):
 
 class LogAnswerRequest(BaseModel):
     session_id: str
+    question_id: int
     answer_text: str
     time_taken: Optional[float] = None
 
@@ -173,13 +174,43 @@ def get_questions():
 
 @router.post("/api/answer", tags=["Session & Question Flow"])
 def log_answer(request: LogAnswerRequest):
-    if not all([request.session_id, request.answer_text]):
+    if not all([request.session_id, request.question_id, request.answer_text]):
         raise HTTPException(status_code=400, detail="Missing required fields")
     success, score = AnswerService.log_answer(
-        request.session_id, request.answer_text, request.time_taken)
+        request.session_id, request.question_id, request.answer_text, request.time_taken)
     if success:
         return {"message": "Answer logged successfully", "score_earned": score}
     raise HTTPException(status_code=400, detail="Failed to log answer")
+
+
+@router.post("/api/answer-with-conditional", tags=["Session & Question Flow"])
+def log_answer_with_conditional(request: LogAnswerRequest):
+    """
+    Log answer and handle conditional responses based on question type and answer.
+    Use this for questions that need special handling like the greeting question.
+    """
+    if not all([request.session_id, request.question_id, request.answer_text]):
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    # Log the answer first
+    success, score = AnswerService.log_answer(
+        request.session_id, request.question_id, request.answer_text, request.time_taken)
+
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to log answer")
+
+    # Handle conditional logic based on question
+    if request.question_id == 1:  # Greeting question
+        conditional_response = ConditionalResponseService.handle_greeting_response(
+            request.session_id, request.answer_text)
+        return {
+            "message": "Answer logged successfully",
+            "score_earned": score,
+            "conditional_response": conditional_response
+        }
+
+    # For other questions, just return normal response
+    return {"message": "Answer logged successfully", "score_earned": score}
 
 
 @router.post("/api/skip-question", tags=["Session & Question Flow"])

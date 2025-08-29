@@ -8,13 +8,18 @@ from workflow_config import WORKFLOW_CONFIG
 import time
 import traceback
 import logging
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
+
+import sys
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("app.log"),
-        logging.StreamHandler()
+        logging.FileHandler("app.log", encoding="utf-8"),
+        logging.StreamHandler(sys.stdout)
     ]
 )
 
@@ -31,11 +36,12 @@ class QuestionService:
 
 class AnswerService:
     @staticmethod
-    def log_answer(session_id, answer_text, time_taken=None):
+    def log_answer(session_id, question_id, answer_text, time_taken=None):
         """Log a single answer to the database."""
         db_session = get_db_session()
         try:
-            logging.info(f"Logging answer for session_id={session_id}.")
+            logging.info(
+                f"Logging answer for session_id={session_id}, question_id={question_id}.")
             logging.debug(
                 f"Answer details: {answer_text}, time_taken={time_taken}.")
 
@@ -45,6 +51,7 @@ class AnswerService:
 
             new_answer = Answer(
                 session_id=session_id,
+                question_id=question_id,
                 answer_text=answer_text
             )
             db_session.add(new_answer)
@@ -137,6 +144,15 @@ class ScoringService:
 
 
 class LeadService:
+    @staticmethod
+    def check_all_questions_answered(lead_id):
+        """
+        Checks if all required questions have been answered for the given lead.
+        Returns True if complete, False otherwise.
+        """
+        # TODO: Implement actual logic based on your models and DB
+        # For now, return True as a stub
+        return True
     @staticmethod
     def create_lead(session_id, utm_source=None):
         """Create a new lead session."""
@@ -303,6 +319,11 @@ class OdooSyncService:
             "x_session_start_time": summary.get('created_at', ''),
             "user_id": 5,  # Replace with your Odoo user ID
         }
+        # Only include valid Odoo crm.lead fields
+        valid_fields = [
+            "name", "partner_name", "city", "type", "phone", "email_from", "user_id"
+        ]
+        lead_data = {k: v for k, v in lead_data.items() if k in valid_fields and v is not None}
         url = os.getenv("ODOO_URL")
         db = os.getenv("ODOO_DB")
         username = os.getenv("ODOO_USERNAME")
@@ -316,7 +337,7 @@ class OdooSyncService:
             # Authenticate
             uid = common.authenticate(db, username, password, {})
             if not uid:
-                print("Odoo authentication failed")
+                logging.error("Odoo authentication failed")
                 return None
 
             # Create the lead
@@ -324,11 +345,12 @@ class OdooSyncService:
             lead_id = models.execute_kw(
                 db, uid, password, 'crm.lead', 'create', [lead_data])
 
-            print(f"Successfully created lead in Odoo with ID: {lead_id}")
+            logging.info(f"Successfully created lead in Odoo with ID: {lead_id}")
             return lead_id
 
         except Exception as e:
-            print(f"Odoo sync failed: {e}")
+            logging.error(f"Odoo sync failed: {e}")
+            logging.error(traceback.format_exc())
             return None
 
     @staticmethod
@@ -426,7 +448,8 @@ class CustomerService:
         try:
             print(f"[DEBUG] Looking for customer_id: {customer_id}")
             lead = db_session.query(Lead).filter_by(
-                customer_id=customer_id).first()
+                customer_id=customer_id
+            ).first()
             print(f"[DEBUG] Found lead: {lead}")
 
             if lead:
@@ -860,21 +883,16 @@ class SessionExitService:
         db_session = get_db_session()
         try:
             # Get most common exit points
+            from sqlalchemy import func
             exit_points = db_session.query(
                 SessionExit.exit_question_id,
                 SessionExit.exit_page,
-                db_session.query(SessionExit).filter_by(
-                    exit_question_id=SessionExit.exit_question_id,
-                    exit_page=SessionExit.exit_page
-                ).count().label('count')
+                func.count(SessionExit.id).label('count')
             ).group_by(SessionExit.exit_question_id, SessionExit.exit_page).all()
 
-            # Get average completion percentage by exit reason
             completion_by_reason = db_session.query(
                 SessionExit.exit_reason,
-                db_session.query(SessionExit.session_completion_percentage).filter_by(
-                    exit_reason=SessionExit.exit_reason
-                ).func.avg().label('avg_completion')
+                func.avg(SessionExit.session_completion_percentage).label('avg_completion')
             ).group_by(SessionExit.exit_reason).all()
 
             return {
@@ -897,3 +915,60 @@ class SessionExitService:
             return {'common_exit_points': [], 'completion_by_reason': []}
         finally:
             db_session.close()
+
+
+class ConditionalResponseService:
+    @staticmethod
+    def handle_greeting_response(session_id, answer_text):
+        """Handle different responses to the greeting question"""
+        from workflow_config import WORKFLOW_CONFIG
+
+        greeting_responses = WORKFLOW_CONFIG.get('greeting_responses', {})
+
+        if answer_text in greeting_responses:
+            response_config = greeting_responses[answer_text]
+
+            if response_config['response_type'] == 'about_info':
+                # Return information about the service
+                return {
+                    'type': 'info_response',
+                    'title': response_config['title'],
+                    'content': response_config['content'],
+                    'next_question': ConditionalResponseService.get_next_question_after_greeting(session_id, response_config['next_action'])
+                }
+
+            elif response_config['response_type'] == 'thank_you':
+                # Return thank you message and end session
+                return {
+                    'type': 'thank_you_response',
+                    'title': response_config['title'],
+                    'content': response_config['content'],
+                    'session_ended': True
+                }
+
+            elif response_config['response_type'] == 'continue_flow':
+                # Continue to business type question
+                return {
+                    'type': 'continue_flow',
+                    'next_question': ConditionalResponseService.get_next_question_after_greeting(session_id, response_config['next_action'])
+                }
+
+        # Default case - continue to business type
+        return {
+            'type': 'continue_flow',
+            'next_question': ConditionalResponseService.get_next_question_after_greeting(session_id, 'continue_to_business_type')
+        }
+
+    @staticmethod
+    def get_next_question_after_greeting(session_id, next_action):
+        """Get the appropriate next question based on the action"""
+        if next_action == 'continue_to_business_type':
+            # Return business type question (id: 2)
+            questions = QuestionService.get_questions()
+            business_type_question = next(
+                (q for q in questions if q['id'] == 2), None)
+            return business_type_question
+        elif next_action == 'end_session':
+            return None
+
+        return None
